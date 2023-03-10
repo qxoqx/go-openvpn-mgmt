@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apparentlymart/go-openvpn-mgmt/demux"
+	"github.com/qxoqx/go-openvpn-mgmt/demux"
 )
 
 var newline = []byte{'\n'}
