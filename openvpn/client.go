@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/apparentlymart/go-openvpn-mgmt/demux"
@@ -88,7 +89,7 @@ func NewClient(conn io.ReadWriter, eventCh chan<- Event) *MgmtClient {
 // OpenVPN will create a suitable management port if launched with the
 // following command line option:
 //
-//    --management <ipaddr> <port>
+//	--management <ipaddr> <port>
 //
 // Address may an IPv4 address, an IPv6 address, or a hostname that resolves
 // to either of these, followed by a colon and then a port number.
@@ -97,8 +98,7 @@ func NewClient(conn io.ReadWriter, eventCh chan<- Event) *MgmtClient {
 // domain socket. To do this, pass an absolute path to the socket as
 // the target address, having run OpenVPN with the following options:
 //
-//    --management /path/to/socket unix
-//
+//	--management /path/to/socket unix
 func Dial(addr string, eventCh chan<- Event) (*MgmtClient, error) {
 	proto := "tcp"
 	if len(addr) > 0 && addr[0] == '/' {
@@ -119,7 +119,7 @@ func Dial(addr string, eventCh chan<- Event) (*MgmtClient, error) {
 // OpenVPN can be instructed to activate a management hold on startup by
 // running it with the following option:
 //
-//     --management-hold
+//	--management-hold
 //
 // Instructing OpenVPN to hold gives your client a chance to connect and
 // do any necessary configuration before a connection proceeds, thus avoiding
@@ -268,6 +268,43 @@ func (c *MgmtClient) sendCommand(cmd []byte) error {
 	}
 	_, err = c.wr.Write(newline)
 	return err
+}
+
+// Kill terminates the OpenVPN connection for the given common name.
+func (c *MgmtClient) Kill(name string) (bool, error) {
+	msg := fmt.Sprintf("kill %s", name)
+	raw, err := c.simpleCommand(msg)
+	if err != nil {
+		return false, err
+	}
+
+	if !bytes.HasPrefix(raw, []byte("common name")) {
+		return false, fmt.Errorf("malformed response from OpenVPN")
+	}
+
+	if strings.HasSuffix(string(raw), "client(s) killed") {
+		return true, nil
+	} else if strings.HasSuffix(string(raw), "not found") {
+		return false, fmt.Errorf("not found")
+	}
+	return false, nil
+}
+
+// ClientKill terminates the OpenVPN connection for the given client id.
+func (c *MgmtClient) ClientKill(id, msg string) (bool, error) {
+	raw, err := c.simpleCommand(fmt.Sprintf("client-kill %s %s", id, msg))
+	if err != nil {
+		return false, err
+	}
+
+	if !bytes.HasPrefix(raw, []byte("client-kill command")) {
+		return false, fmt.Errorf("malformed response from OpenVPN")
+	}
+
+	if strings.HasSuffix(string(raw), "client-kill command succeeded") {
+		return true, nil
+	}
+	return false, nil
 }
 
 // sendCommandPayload can be called after sendCommand for
